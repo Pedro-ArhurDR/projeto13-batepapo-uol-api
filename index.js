@@ -1,6 +1,6 @@
 import  express, { json }  from "express";
 import cors from 'cors'
-import { MongoClient } from "mongodb";
+import { MongoClient, ObjectId } from "mongodb";
 import dotenv from "dotenv";
 import joi from 'joi'
 import dayjs from "dayjs";
@@ -13,6 +13,11 @@ const userSchema = joi.object({
   name: joi.string().required()
 });
 
+const userSchemaM = joi.object({ 
+  to: joi.string().required(),
+  text: joi.string().required(),
+  type: joi.any().valid("message", "private_message")})
+
 const mongoClient = new MongoClient(process.env.MONGO_URI);
 let db;
 
@@ -22,6 +27,24 @@ try {
   } catch (err) {
     console.log(err);
   }
+
+setInterval(ExitUsers,15000)
+
+async function  ExitUsers(){
+  console.log('RETIRANDO USUARIOS')
+  const allusers =  await db.collection('users').find().toArray()
+  allusers.map(e => Date.now() - e.lastStatus > 10000?
+   db.collection("users").deleteOne({ name:e.name })&& 
+   db.collection('messages')
+   .insertOne(
+    {from: e.name, 
+    to: 'Todos', 
+    text: 'sai da sala...',
+     type: 'status', 
+     time: dayjs().format('HH:mm:ss')}
+   )
+   :null )
+}
 
 
 App.post("/participants", async (req, res) => {
@@ -55,8 +78,8 @@ App.post("/participants", async (req, res) => {
       time: dayjs().format('HH:mm:ss')}
 
       res.sendStatus(201)
-      db.collection('status').insertOne(status)
-      db.collection('users').insertOne(user)
+     await db.collection('messages').insertOne(status)
+      await db.collection('users').insertOne(user)
       console.log('TUDOCERTO')
 
     } catch (err) {
@@ -75,18 +98,46 @@ App.post("/participants", async (req, res) => {
       return
     } catch (err) {
       console.log(err);
-      res.sendStatus(err);
+      res.status(500).send(err);
     }
   });
 
 
   App.post("/messages", async (req, res) => {
+    console.log('PÓST INICIADO')
+    const User = req.headers.user
+    console.log('SEU USER', User)
+    const {to,text,type} = req.body
+    const validar = {
+      to: to,
+    text: text,
+    type: type
+    }
+    const validate = userSchemaM.validate(validar,{ abortEarly: false })
+    if (validate.error) {
+      const erros = validate.error.details.map((detail) => detail.message);
+      res.sendStatus(422);
+      console.log(erros)
+      return;
+    }
+    const userExist = await db.collection('users').findOne({name:User})
+    if(userExist === null){
+      console.log('ERRO NULL')
+      res.sendStatus(422)
+      return
+    }
     try {
-      const receitas = await db
-        .collection("drinsOficiais")
-        .find({})
-        .toArray();
-      res.send(receitas);
+      const menssagem = {
+        from:User,
+        to:to,
+        text:text,
+        type:type,
+        time: dayjs().format('HH:mm:ss')
+      }
+      console.log(menssagem)
+      await db.collection('messages').insertOne(menssagem)
+      console.log('deu certo')
+      res.sendStatus(201);
     } catch (err) {
       console.log(err);
       res.sendStatus(err);
@@ -95,12 +146,22 @@ App.post("/participants", async (req, res) => {
 
 
   App.get("/messages", async (req, res) => {
+    const limit = parseInt(req.query.limit);
+    const {user} = req.headers
+    const arr = await db.collection('messages').find().toArray()
+    const find = arr.filter( e => e.to === user|| e.to ==='Todos'|| e.from===user)
+    if(limit>=1){
+      const msg = find
+      const Imsg = []
+      for (var i = msg.length - 1; i >= 0; i--) {
+        Imsg.unshift(msg[i]);
+    }
+      res.send(Imsg.slice(0,limit))
+      return
+    }
+    res.send(find)
     try {
-      const receitas = await db
-        .collection("drinsOficiais")
-        .find({})
-        .toArray();
-      res.send(receitas);
+     res.send()
     } catch (err) {
       console.log(err);
       res.sendStatus(err);
@@ -109,12 +170,18 @@ App.post("/participants", async (req, res) => {
 
 
   App.post("/status", async (req, res) => {
+    const {user} = req.headers
+    const users =  await db.collection("users").find().toArray()
+    const userExist= await db.collection("users").findOne({name:user})
+    if(userExist===null){
+      res.sendStatus(404)
+      return
+    }
     try {
-      const receitas = await db
-        .collection("drinsOficiais")
-        .find({})
-        .toArray();
-      res.send(receitas);
+      await db.
+      collection('users').
+      updateOne({name:user},{$set:{lastStatus:Date.now()}})
+      res.sendStatus(200);
     } catch (err) {
       console.log(err);
       res.sendStatus(err);

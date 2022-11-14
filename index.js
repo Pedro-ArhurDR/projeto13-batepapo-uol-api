@@ -104,29 +104,29 @@ App.post("/participants", async (req, res) => {
 
 
   App.post("/messages", async (req, res) => {
-    console.log('PÓST INICIADO')
-    const User = req.headers.user
-    console.log('SEU USER', User)
-    const {to,text,type} = req.body
-    const validar = {
-      to: to,
-    text: text,
-    type: type
-    }
-    const validate = userSchemaM.validate(validar,{ abortEarly: false })
-    if (validate.error) {
-      const erros = validate.error.details.map((detail) => detail.message);
-      res.sendStatus(422);
-      console.log(erros)
-      return;
-    }
-    const userExist = await db.collection('users').findOne({name:User})
-    if(userExist === null){
-      console.log('ERRO NULL')
-      res.sendStatus(422)
-      return
-    }
     try {
+      console.log('PÓST INICIADO')
+      const User = req.headers.user
+      console.log('SEU USER', User)
+      const {to,text,type} = req.body
+      const validar = {
+        to: to,
+      text: text,
+      type: type
+      }
+      const validate = userSchemaM.validate(validar,{ abortEarly: false })
+      if (validate.error) {
+        const erros = validate.error.details.map((detail) => detail.message);
+        res.sendStatus(422);
+        console.log(erros)
+        return;
+      }
+      const userExist = await db.collection('users').findOne({name:User})
+      if(userExist === null){
+        console.log('ERRO NULL')
+        res.sendStatus(422)
+        return
+      }
       const menssagem = {
         from:User,
         to:to,
@@ -146,22 +146,23 @@ App.post("/participants", async (req, res) => {
 
 
   App.get("/messages", async (req, res) => {
-    const limit = parseInt(req.query.limit);
-    const {user} = req.headers
-    const arr = await db.collection('messages').find().toArray()
-    const find = arr.filter( e => e.to === user|| e.to ==='Todos'|| e.from===user)
-    if(limit>=1){
-      const msg = find
-      const Imsg = []
-      for (var i = msg.length - 1; i >= 0; i--) {
-        Imsg.unshift(msg[i]);
-    }
-      res.send(Imsg.slice(0,limit))
-      return
-    }
-    res.send(find)
     try {
-     res.send()
+      const limit = parseInt(req.query.limit);
+      const {user} = req.headers
+      const arr = await db.collection('messages').find().toArray()
+      const find = arr.filter( e => e.to === user|| 
+        e.to ==='Todos'|| e.from===user||e.type==="message")
+      if(limit>=1){
+        const msg = find
+        const Imsg = []
+        for (let i = msg.length - 1; i >= 0; i--) {
+          Imsg.push(msg[i]);
+      }
+      const final = Imsg.reverse()
+        res.send(final.slice(find.length-limit,find.length))
+        return
+      }
+      res.send(find)
     } catch (err) {
       console.log(err);
       res.sendStatus(err);
@@ -170,14 +171,14 @@ App.post("/participants", async (req, res) => {
 
 
   App.post("/status", async (req, res) => {
-    const {user} = req.headers
-    const users =  await db.collection("users").find().toArray()
-    const userExist= await db.collection("users").findOne({name:user})
-    if(userExist===null){
-      res.sendStatus(404)
-      return
-    }
     try {
+      const {user} = req.headers
+      const users =  await db.collection("users").find().toArray()
+      const userExist= await db.collection("users").findOne({name:user})
+      if(userExist===null){
+        res.sendStatus(404)
+        return
+      }
       await db.
       collection('users').
       updateOne({name:user},{$set:{lastStatus:Date.now()}})
